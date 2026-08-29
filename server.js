@@ -61,6 +61,13 @@ app.get(['/user','/user/'], async (_req,res,next)=>{
   }catch(e){next(e)}
 });
 app.use('/user', express.static(path.join(publicDir,'user'), { extensions:['html'] }));
+app.get('/admin', async (_req,res,next)=>{
+  try{
+    const file=await readFile(path.join(publicDir,'admin','index.html'),'utf8');
+    const injected='\n<script src="/admin/admin-enhance.js"></script>\n';
+    res.type('html').send(file.replace('</body>', injected+'</body>'));
+  }catch(e){next(e)}
+});
 app.use('/admin', express.static(path.join(publicDir,'admin'), { extensions:['html'] }));
 
 app.get('/', (_req,res)=>res.sendFile(path.join(publicDir,'login','index.html')));
