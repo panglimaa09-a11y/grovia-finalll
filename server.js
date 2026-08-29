@@ -22,6 +22,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, 'public');
 
+// These two values are public Supabase project configuration, not service secrets.
+// Environment variables override the fallback values in production.
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ofisyujlpvnuxwiquafm.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_24biTaIviWxGdoS4uzO1YA_KvxWxsaw';
+
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const origin = process.env.APP_ORIGIN || undefined;
@@ -45,8 +50,8 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/public-config', (_req, res) => {
   res.json(apiOk({
-    supabaseUrl: process.env.SUPABASE_URL || '',
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY
   }));
 });
 
