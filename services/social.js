@@ -1,0 +1,3 @@
+const providers=['instagram','facebook','tiktok','youtube','threads','x'];
+export function isProvider(value){return providers.includes(String(value).toLowerCase());}
+export function providerConfigured(value){const p=String(value).toLowerCase();return isProvider(p)&&({instagram:!!process.env.FACEBOOK_APP_ID&&!!process.env.FACEBOOK_APP_SECRET,facebook:!!process.env.FACEBOOK_APP_ID&&!!process.env.FACEBOOK_APP_SECRET,tiktok:!!process.env.TIKTOK_CLIENT_KEY&&!!process.env.TIKTOK_CLIENT_SECRET,youtube:!!process.env.GOOGLE_CLIENT_ID&&!!process.env.GOOGLE_CLIENT_SECRET,threads:!!process.env.FACEBOOK_APP_ID&&!!process.env.FACEBOOK_APP_SECRET,x:!!process.env.X_CLIENT_ID&&!!process.env.X_CLIENT_SECRET}[p]);}
