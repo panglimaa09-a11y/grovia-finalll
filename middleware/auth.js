@@ -24,7 +24,9 @@ export async function requireUser(req, res, next) {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false, autoRefreshToken: false }
     });
-    req.serviceClient = adminClient;
+    // Local development may not have SUPABASE_SERVICE_ROLE_KEY configured.
+    // Use the authenticated user client as a safe fallback; RLS still applies.
+    req.serviceClient = adminClient || req.userClient;
     return next();
   } catch (e) {
     console.error('requireUser error:', e);
