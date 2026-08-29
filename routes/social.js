@@ -11,7 +11,8 @@ const YT_API = 'https://www.googleapis.com/youtube/v3';
 const YT_ANALYTICS_API = 'https://youtubeanalytics.googleapis.com/v2/reports';
 const YT_SCOPE = [
   'https://www.googleapis.com/auth/youtube.readonly',
-  'https://www.googleapis.com/auth/yt-analytics.readonly'
+  'https://www.googleapis.com/auth/yt-analytics.readonly',
+  'https://www.googleapis.com/auth/youtube.upload'
 ].join(' ');
 
 function appOrigin() {
@@ -90,41 +91,18 @@ r.post('/youtube/sync', requireUser, async (req, res) => {
     const { data: account, error: accountError } = await req.serviceClient.from('grovia_social_accounts').select('id,user_id,platform,followers,token_expires_at,youtube_channel_id,youtube_access_token,youtube_refresh_token').eq('user_id', req.user.id).eq('platform', 'youtube').maybeSingle();
     if (accountError) { const e = new Error(accountError.message); e.code = 'ACCOUNT_READ_FAILED'; e.stage = 'DATABASE_READ'; throw e; }
     if (!account?.youtube_refresh_token) { const e = new Error('YouTube belum terhubung ulang untuk izin Analytics. Klik Connect YouTube lagi.'); e.code = 'ANALYTICS_SCOPE_MISSING'; e.stage = 'TOKEN_REFRESH'; throw e; }
-
-    let accessToken = account.youtube_access_token;
-    let expiresAt = account.token_expires_at ? new Date(account.token_expires_at).getTime() : 0;
+    let accessToken = account.youtube_access_token; let expiresAt = account.token_expires_at ? new Date(account.token_expires_at).getTime() : 0;
     if (!accessToken || !expiresAt || expiresAt < Date.now() + 60_000) {
-      const refreshed = await refreshAccessToken(account.youtube_refresh_token);
-      accessToken = refreshed.access_token;
-      expiresAt = Date.now() + Number(refreshed.expires_in || 3600) * 1000;
+      const refreshed = await refreshAccessToken(account.youtube_refresh_token); accessToken = refreshed.access_token; expiresAt = Date.now() + Number(refreshed.expires_in || 3600) * 1000;
       const { error: updateError } = await req.serviceClient.from('grovia_social_accounts').update({ youtube_access_token: accessToken, token_expires_at: new Date(expiresAt).toISOString() }).eq('id', account.id).eq('user_id', req.user.id);
       if (updateError) { const e = new Error(updateError.message); e.code = 'TOKEN_SAVE_FAILED'; e.stage = 'DATABASE_SAVE'; throw e; }
     }
-
-    const startDate = isoDateDaysAgo(30); const endDate = isoDateDaysAgo(1);
-    const report = await queryAnalytics(accessToken, startDate, endDate);
-    const rows = Array.isArray(report.rows) ? report.rows : [];
-    const upserts = rows.map(row => {
-      const [metricDate, views, likes, comments, shares, gained, lost, watch] = row;
-      const v = Number(views || 0);
-      const engagementRate = v > 0 ? ((Number(likes || 0) + Number(comments || 0) + Number(shares || 0)) / v) * 100 : 0;
-      return { user_id: req.user.id, metric_date: metricDate, followers: Math.max(0, Number(account.followers || 0)), reach: 0, views: v, watch_time_minutes: Number(watch || 0), engagement_rate: engagementRate, subscribers_gained: Number(gained || 0) };
-    });
-    if (upserts.length) {
-      const { error: upsertError } = await req.serviceClient.from('grovia_analytics_daily').upsert(upserts, { onConflict: 'user_id,metric_date' });
-      if (upsertError) { const e = new Error(upsertError.message); e.code = 'ANALYTICS_SAVE_FAILED'; e.stage = 'DATABASE_SAVE'; throw e; }
-    }
-
-    const channel = await getChannel(accessToken);
-    if (channel) {
-      await req.serviceClient.from('grovia_social_accounts').update({ followers: Number(channel.statistics?.subscriberCount || 0), handle: channel.snippet?.customUrl || channel.snippet?.title || channel.id, youtube_channel_title: channel.snippet?.title || null }).eq('id', account.id).eq('user_id', req.user.id);
-    }
-    return res.json(apiOk({ synced: true, startDate, endDate, rows: upserts.length }));
-  } catch (error) {
-    const stage = error?.stage || 'YOUTUBE_SYNC'; const code = error?.code || 'UNKNOWN'; const reason = String(error?.message || 'Sinkronisasi YouTube gagal').slice(0, 220);
-    console.error('YouTube analytics sync:', { stage, code, message: reason });
-    return res.status(400).json(apiError(code, `${stage}: ${reason}`));
-  }
+    const startDate = isoDateDaysAgo(30); const endDate = isoDateDaysAgo(1); const report = await queryAnalytics(accessToken, startDate, endDate); const rows = Array.isArray(report.rows) ? report.rows : [];
+    const upserts = rows.map(row => { const [metricDate, views, likes, comments, shares, gained, lost, watch] = row; const v=Number(views||0); const engagementRate=v>0?((Number(likes||0)+Number(comments||0)+Number(shares||0))/v)*100:0; return { user_id:req.user.id,metric_date:metricDate,followers:Math.max(0,Number(account.followers||0)),reach:0,views:v,watch_time_minutes:Number(watch||0),engagement_rate:engagementRate,subscribers_gained:Number(gained||0) }; });
+    if(upserts.length){const{error:upsertError}=await req.serviceClient.from('grovia_analytics_daily').upsert(upserts,{onConflict:'user_id,metric_date'});if(upsertError){const e=new Error(upsertError.message);e.code='ANALYTICS_SAVE_FAILED';e.stage='DATABASE_SAVE';throw e;}}
+    const channel=await getChannel(accessToken);if(channel){await req.serviceClient.from('grovia_social_accounts').update({followers:Number(channel.statistics?.subscriberCount||0),handle:channel.snippet?.customUrl||channel.snippet?.title||channel.id,youtube_channel_title:channel.snippet?.title||null}).eq('id',account.id).eq('user_id',req.user.id);}
+    return res.json(apiOk({synced:true,startDate,endDate,rows:upserts.length}));
+  } catch(error){const stage=error?.stage||'YOUTUBE_SYNC';const code=error?.code||'UNKNOWN';const reason=String(error?.message||'Sinkronisasi YouTube gagal').slice(0,220);console.error('YouTube analytics sync:',{stage,code,message:reason});return res.status(400).json(apiError(code,`${stage}: ${reason}`));}
 });
 
 r.get('/youtube/callback', async (req, res) => {
@@ -143,22 +121,13 @@ r.get('/youtube/callback', async (req, res) => {
     const row = { user_id: state.userId, platform: 'youtube', handle: channel.snippet?.customUrl || channel.snippet?.title || channel.id, followers: Number(channel.statistics?.subscriberCount || 0), engagement_rate: 0, status: 'connected', token_expires_at: expiresAt, youtube_channel_id: channel.id, youtube_channel_title: channel.snippet?.title || null, youtube_access_token: tokens.access_token || null, youtube_refresh_token: tokens.refresh_token || null };
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) { const e = new Error('SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di server'); e.code = 'SERVICE_ROLE_MISSING'; e.stage = 'DATABASE_SAVE'; throw e; }
-    const url = process.env.SUPABASE_URL || 'https://ofisyujlpvnuxwiquafm.supabase.co';
-    const client = createClient(url, serviceKey, { auth: { persistSession: false } });
+    const url = process.env.SUPABASE_URL || 'https://ofisyujlpvnuxwiquafm.supabase.co'; const client = createClient(url, serviceKey, { auth: { persistSession: false } });
     const { error } = await client.from('grovia_social_accounts').upsert(row, { onConflict: 'user_id,platform' });
     if (error) { const dbError = new Error(error.message); dbError.code = 'SUPABASE_SAVE_FAILED'; dbError.stage = 'DATABASE_SAVE'; throw dbError; }
     return res.redirect(`${base}/user/?oauth=youtube&status=connected`);
-  } catch (error) {
-    const stage = error?.stage || 'OAUTH_CALLBACK'; const code = error?.code || 'UNKNOWN'; const reason = String(error?.message || 'Koneksi YouTube gagal').slice(0, 180);
-    console.error('YouTube OAuth callback:', { stage, code, message: reason });
-    return res.redirect(`${base}/user/?oauth=youtube&status=error&stage=${encodeURIComponent(stage)}&code=${encodeURIComponent(code)}&reason=${encodeURIComponent(reason)}`);
-  }
+  } catch (error) { const stage=error?.stage||'OAUTH_CALLBACK';const code=error?.code||'UNKNOWN';const reason=String(error?.message||'Koneksi YouTube gagal').slice(0,180);console.error('YouTube OAuth callback:',{stage,code,message:reason});return res.redirect(`${base}/user/?oauth=youtube&status=error&stage=${encodeURIComponent(stage)}&code=${encodeURIComponent(code)}&reason=${encodeURIComponent(reason)}`); }
 });
 
-r.post('/disconnect', requireUser, async (req, res) => {
-  const { error } = await req.userClient.from('grovia_social_accounts').delete().eq('id', String(req.body.id || '')).eq('user_id', req.user.id);
-  if (error) return res.status(400).json(apiError('SOCIAL_DELETE_FAILED', error.message));
-  res.json(apiOk({ deleted: true }));
-});
+r.post('/disconnect', requireUser, async (req, res) => { const { error } = await req.userClient.from('grovia_social_accounts').delete().eq('id', String(req.body.id || '')).eq('user_id', req.user.id); if (error) return res.status(400).json(apiError('SOCIAL_DELETE_FAILED', error.message)); res.json(apiOk({ deleted: true })); });
 
 export default r;
