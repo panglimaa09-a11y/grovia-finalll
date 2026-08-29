@@ -1,0 +1,48 @@
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+  let session=null;
+  async function getSession(){
+    const cfg=await fetch('/api/public-config',{cache:'no-store'}).then(r=>r.json());
+    if(!cfg.ok||!window.supabase)throw Error('Supabase tidak siap.');
+    const client=supabase.createClient(cfg.data.supabaseUrl,cfg.data.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true}});
+    const s=await client.auth.getSession(); session=s.data.session; if(!session)location.href='/login/'; return session;
+  }
+  async function api(path,opt={}){
+    if(!session)await getSession();
+    const r=await fetch(path,{...opt,headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,...(opt.headers||{})},cache:'no-store'});
+    const j=await r.json().catch(()=>({})); if(!r.ok||j.ok===false)throw Error(j.error?.message||`HTTP ${r.status}`); return j.data;
+  }
+  function inject(){
+    if(!$('nav')||$('publisher'))return;
+    const nav=$('nav'); const btn=document.createElement('button'); btn.dataset.p='publisher'; btn.textContent='▶ Publisher'; nav.insertBefore(btn,nav.querySelector('[data-p="analytics"]')||null); btn.onclick=()=>go('publisher');
+    const page=document.createElement('section'); page.id='publisher'; page.className='page'; page.innerHTML=`<div class="head"><div><div class="ey">PUBLISHING ENGINE</div><h1>Publisher</h1><p>Upload video langsung ke channel YouTube yang sudah terhubung.</p></div></div><div class="grid two"><div class="card"><label class="muted">Content<select id="pubContent" class="field"><option value="">Memuat…</option></select></label><label class="muted">Video file<input id="pubFile" class="field" type="file" accept="video/mp4,video/webm,video/quicktime"></label><label class="muted">Privacy<select id="pubPrivacy" class="field"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label><button class="btn primary" id="pubButton" style="width:100%">Upload & Publish to YouTube</button><div id="pubStatus" class="muted" style="margin-top:10px"></div></div><div class="card"><div class="label">PUBLISH FLOW</div><div class="row"><span>1. Pilih konten</span><span>✓</span></div><div class="row"><span>2. Pilih video</span><span>MP4/WebM/MOV</span></div><div class="row"><span>3. Upload resumable</span><span>YouTube</span></div><div class="row"><span>4. Simpan Video ID</span><span>Library</span></div><div class="row"><span>5. Update status</span><span>Published</span></div><p class="muted" style="margin-top:12px">Upload menggunakan sesi resumable supaya file video tidak perlu melewati server GROVIA.</p></div></div>`;
+    document.querySelector('.content').appendChild(page);
+    $('pubButton').onclick=publish;
+    loadContent();
+  }
+  async function loadContent(){
+    try{const items=await api('/api/content');const sel=$('pubContent');if(!sel)return;sel.innerHTML='<option value="">Pilih konten</option>'+items.map(x=>`<option value="${esc(x.id)}">${esc(x.title)}</option>`).join('');}
+    catch(e){const s=$('pubStatus');if(s)s.textContent=e.message;}
+  }
+  async function publish(){
+    const id=$('pubContent')?.value,file=$('pubFile')?.files?.[0],privacy=$('pubPrivacy')?.value||'private',status=$('pubStatus'),button=$('pubButton');
+    if(!id)return status.textContent='Pilih konten terlebih dahulu.';
+    if(!file)return status.textContent='Pilih file video terlebih dahulu.';
+    if(!file.size)return status.textContent='File video kosong.';
+    button.disabled=true; button.textContent='Menyiapkan upload…'; status.textContent='Meminta upload session YouTube…';
+    try{
+      const init=await api('/api/publisher/youtube/init',{method:'POST',body:JSON.stringify({content_id:id,filename:file.name,mime_type:file.type||'video/mp4',size:file.size})});
+      const upload=await fetch(init.upload_url,{method:'PUT',headers:{'Content-Type':file.type||'video/mp4','Content-Length':String(file.size)},body:file});
+      const resource=await upload.json().catch(()=>({}));
+      if(!upload.ok)throw Error(resource.error?.message||resource.error?.errors?.[0]?.message||`Upload YouTube gagal (${upload.status})`);
+      const videoId=resource.id;if(!videoId)throw Error('YouTube tidak mengembalikan video ID.');
+      await api('/api/publisher/youtube/complete',{method:'POST',body:JSON.stringify({content_id:id,video_id:videoId,title:'',privacy_status:privacy})});
+      status.textContent='✓ Video berhasil dipublikasikan ke YouTube.'; button.textContent='Published'; if(window.groviaReload)await window.groviaReload();
+    }catch(e){status.textContent=e.message||'Publisher gagal.';button.textContent='Upload & Publish to YouTube';}
+    finally{button.disabled=false;}
+  }
+  const originalGo=window.go;
+  window.go=function(p){if(originalGo)originalGo(p);if(p==='publisher')setTimeout(()=>loadContent(),50)};
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(inject,300));
+})();
