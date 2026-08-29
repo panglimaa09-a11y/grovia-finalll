@@ -1,4 +1,24 @@
 (function(){
+  async function renderConnectedAccount(){
+    try{
+      if(typeof sb==='undefined'||!sb) return;
+      const s=await sb.auth.getSession();
+      const token=s?.data?.session?.access_token;
+      if(!token) return;
+      const response=await fetch('/api/social/accounts',{headers:{Authorization:'Bearer '+token}});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok||!result.ok) return;
+      const accounts=Array.isArray(result.data)?result.data:[];
+      const box=document.getElementById('accountsBox');
+      if(!box) return;
+      if(!accounts.length){
+        box.innerHTML='<div class="empty">Belum ada akun sosial.</div>';
+        return;
+      }
+      box.innerHTML=accounts.map(x=>`<div class="row"><div><b>${x.platform}</b><div class="muted">${x.youtube_channel_title||x.handle||'Connected account'}</div></div><div style="text-align:right"><span class="tag">${x.status||'connected'}</span><div class="muted">${Number(x.followers||0).toLocaleString('id-ID')} subscribers/followers</div></div></div>`).join('');
+    }catch(e){console.warn('Render connected social account:',e?.message||e)}
+  }
+
   async function connectYouTube(){
     try{
       if(typeof session==='undefined'||!session?.access_token){
@@ -42,6 +62,10 @@
     };
     const message=messages[status];
     if(message) setTimeout(()=>alert(message),150);
+    if(status==='connected') setTimeout(renderConnectedAccount,250);
     history.replaceState({},'',window.location.pathname);
   }
+
+  window.renderConnectedAccount=renderConnectedAccount;
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(renderConnectedAccount,100));
 })();
