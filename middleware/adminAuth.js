@@ -1,0 +1,1 @@
+export function requireRole(...roles){return(req,res,next)=>{if(!req.adminRole||!roles.includes(req.adminRole))return res.status(403).json({ok:false,error:{code:'INSUFFICIENT_ROLE',message:'Role tidak memiliki izin.'}});next();};}
