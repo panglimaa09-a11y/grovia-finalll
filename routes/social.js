@@ -13,10 +13,8 @@ const YT_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
 function appOrigin() {
   const explicit = String(process.env.APP_ORIGIN || '').trim().replace(/\/$/, '');
   if (explicit) return explicit;
-
   const vercelUrl = String(process.env.VERCEL_URL || '').trim().replace(/\/$/, '');
   if (vercelUrl) return `https://${vercelUrl}`;
-
   return 'https://grovia-finalll.vercel.app';
 }
 
@@ -31,6 +29,10 @@ function requiredConfig() {
   );
 }
 
+function oauthSecret() {
+  return process.env.OAUTH_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'grovia-oauth-state-fallback';
+}
+
 function signState(userId) {
   const nonce = crypto.randomBytes(24).toString('base64url');
   const payload = Buffer.from(JSON.stringify({
@@ -38,9 +40,7 @@ function signState(userId) {
     nonce,
     exp: Date.now() + 10 * 60 * 1000
   })).toString('base64url');
-
-  const secret = process.env.OAUTH_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'grovia-oauth-state-fallback';
-  const sig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  const sig = crypto.createHmac('sha256', oauthSecret()).update(payload).digest('base64url');
   return `${payload}.${sig}`;
 }
 
@@ -48,13 +48,10 @@ function verifyState(value) {
   try {
     const [payload, sig] = String(value || '').split('.');
     if (!payload || !sig) return null;
-
-    const secret = process.env.OAUTH_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'grovia-oauth-state-fallback';
-    const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    const expected = crypto.createHmac('sha256', oauthSecret()).update(payload).digest('base64url');
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-
     const obj = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     return obj.exp > Date.now() ? obj : null;
   } catch {
@@ -70,16 +67,17 @@ async function tokenExchange(code) {
     redirect_uri: callbackUrl(),
     grant_type: 'authorization_code'
   });
-
   const response = await fetch(YT_TOKEN, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body
   });
-
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error_description || data.error || 'Google token exchange failed');
+    const error = new Error(data.error_description || data.error || `Google token exchange failed (${response.status})`);
+    error.code = data.error || `HTTP_${response.status}`;
+    error.stage = 'TOKEN_EXCHANGE';
+    throw error;
   }
   return data;
 }
@@ -88,10 +86,12 @@ async function getChannel(accessToken) {
   const response = await fetch(`${YT_API}/channels?part=snippet,statistics&mine=true`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error?.message || 'YouTube channel request failed');
+    const error = new Error(data.error?.message || `YouTube channel request failed (${response.status})`);
+    error.code = data.error?.errors?.[0]?.reason || `HTTP_${response.status}`;
+    error.stage = 'YOUTUBE_API';
+    throw error;
   }
   return data.items?.[0] || null;
 }
@@ -99,10 +99,9 @@ async function getChannel(accessToken) {
 r.get('/accounts', requireUser, async (req, res) => {
   const { data, error } = await req.userClient
     .from('grovia_social_accounts')
-    .select('id,platform,handle,followers,engagement_rate,status,token_expires_at,created_at')
+    .select('id,platform,handle,followers,engagement_rate,status,token_expires_at,created_at,youtube_channel_id,youtube_channel_title')
     .eq('user_id', req.user.id)
     .order('created_at', { ascending: false });
-
   if (error) return res.status(500).json(apiError('SOCIAL_READ_FAILED', error.message));
   res.json(apiOk(data || []));
 });
@@ -112,14 +111,9 @@ r.post('/connect', requireUser, (req, res) => {
   if (p !== 'youtube') {
     return res.status(400).json(apiError('VALIDATION_ERROR', 'Untuk saat ini baru YouTube yang tersedia.'));
   }
-
   if (!requiredConfig()) {
-    return res.status(503).json(apiError(
-      'PROVIDER_NOT_CONFIGURED',
-      'GOOGLE_CLIENT_ID atau GOOGLE_CLIENT_SECRET belum tersedia di server Vercel.'
-    ));
+    return res.status(503).json(apiError('PROVIDER_NOT_CONFIGURED', 'GOOGLE_CLIENT_ID atau GOOGLE_CLIENT_SECRET belum tersedia di server Vercel.'));
   }
-
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     redirect_uri: callbackUrl(),
@@ -130,35 +124,39 @@ r.post('/connect', requireUser, (req, res) => {
     scope: YT_SCOPE,
     state: signState(req.user.id)
   });
-
-  res.json(apiOk({
-    provider: 'youtube',
-    authorization_url: `${YT_AUTH}?${params.toString()}`
-  }));
+  res.json(apiOk({ provider: 'youtube', authorization_url: `${YT_AUTH}?${params.toString()}` }));
 });
 
 r.get('/youtube/callback', async (req, res) => {
   const base = appOrigin();
-
   try {
     if (req.query.error) {
-      return res.redirect(`${base}/user/?oauth=youtube&status=denied`);
+      const reason = String(req.query.error_description || req.query.error).slice(0, 180);
+      return res.redirect(`${base}/user/?oauth=youtube&status=denied&reason=${encodeURIComponent(reason)}`);
     }
-
     const state = verifyState(req.query.state);
     if (!state) {
-      return res.redirect(`${base}/user/?oauth=youtube&status=invalid_state`);
+      return res.redirect(`${base}/user/?oauth=youtube&status=invalid_state&reason=${encodeURIComponent('OAuth state tidak valid atau sudah kedaluwarsa')}`);
     }
-
     const code = String(req.query.code || '');
     if (!code) {
-      return res.redirect(`${base}/user/?oauth=youtube&status=missing_code`);
+      return res.redirect(`${base}/user/?oauth=youtube&status=missing_code&reason=${encodeURIComponent('Authorization code tidak diterima dari Google')}`);
     }
 
     const tokens = await tokenExchange(code);
+    if (!tokens.access_token) {
+      const error = new Error('Google tidak mengembalikan access token');
+      error.code = 'MISSING_ACCESS_TOKEN';
+      error.stage = 'TOKEN_EXCHANGE';
+      throw error;
+    }
+
     const channel = await getChannel(tokens.access_token);
     if (!channel) {
-      return res.redirect(`${base}/user/?oauth=youtube&status=no_channel`);
+      const error = new Error('Akun Google tidak memiliki channel YouTube yang dapat diakses');
+      error.code = 'NO_CHANNEL';
+      error.stage = 'YOUTUBE_API';
+      throw error;
     }
 
     const expiresAt = tokens.expires_in
@@ -180,20 +178,33 @@ r.get('/youtube/callback', async (req, res) => {
     };
 
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!serviceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi');
+    if (!serviceKey) {
+      const error = new Error('SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di server');
+      error.code = 'SERVICE_ROLE_MISSING';
+      error.stage = 'DATABASE_SAVE';
+      throw error;
+    }
 
     const url = process.env.SUPABASE_URL || 'https://ofisyujlpvnuxwiquafm.supabase.co';
     const client = createClient(url, serviceKey, { auth: { persistSession: false } });
-
     const { error } = await client
       .from('grovia_social_accounts')
       .upsert(row, { onConflict: 'user_id,platform' });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      const dbError = new Error(error.message);
+      dbError.code = 'SUPABASE_SAVE_FAILED';
+      dbError.stage = 'DATABASE_SAVE';
+      throw dbError;
+    }
+
     return res.redirect(`${base}/user/?oauth=youtube&status=connected`);
   } catch (error) {
-    console.error('YouTube OAuth callback:', error);
-    return res.redirect(`${base}/user/?oauth=youtube&status=error`);
+    const stage = error?.stage || 'OAUTH_CALLBACK';
+    const code = error?.code || 'UNKNOWN';
+    const reason = String(error?.message || 'Koneksi YouTube gagal').slice(0, 180);
+    console.error('YouTube OAuth callback:', { stage, code, message: reason });
+    return res.redirect(`${base}/user/?oauth=youtube&status=error&stage=${encodeURIComponent(stage)}&code=${encodeURIComponent(code)}&reason=${encodeURIComponent(reason)}`);
   }
 });
 
@@ -203,7 +214,6 @@ r.post('/disconnect', requireUser, async (req, res) => {
     .delete()
     .eq('id', String(req.body.id || ''))
     .eq('user_id', req.user.id);
-
   if (error) return res.status(400).json(apiError('SOCIAL_DELETE_FAILED', error.message));
   res.json(apiOk({ deleted: true }));
 });
