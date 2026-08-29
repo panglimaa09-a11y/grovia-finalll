@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -22,8 +23,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, 'public');
 
-// These two values are public Supabase project configuration, not service secrets.
-// Environment variables override the fallback values in production.
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ofisyujlpvnuxwiquafm.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_24biTaIviWxGdoS4uzO1YA_KvxWxsaw';
 
@@ -33,27 +32,14 @@ const origin = process.env.APP_ORIGIN || undefined;
 
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({
-  origin: origin || true,
-  credentials: false,
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(cors({ origin: origin || true, credentials: false, methods: ['GET','POST','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use('/api/webhooks', express.raw({ type: 'application/json', limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false }));
 
-app.get('/api/health', (_req, res) => {
-  res.json(apiOk({ service: 'grovia', status: 'ok', time: new Date().toISOString() }));
-});
-
-app.get('/api/public-config', (_req, res) => {
-  res.json(apiOk({
-    supabaseUrl: SUPABASE_URL,
-    supabaseAnonKey: SUPABASE_ANON_KEY
-  }));
-});
+app.get('/api/health', (_req,res)=>res.json(apiOk({ service:'grovia', status:'ok', time:new Date().toISOString() })));
+app.get('/api/public-config', (_req,res)=>res.json(apiOk({ supabaseUrl:SUPABASE_URL, supabaseAnonKey:SUPABASE_ANON_KEY })));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
@@ -66,25 +52,21 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
-app.use('/login', express.static(path.join(publicDir, 'login'), { extensions: ['html'] }));
-app.use('/user', express.static(path.join(publicDir, 'user'), { extensions: ['html'] }));
-app.use('/admin', express.static(path.join(publicDir, 'admin'), { extensions: ['html'] }));
-
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(publicDir, 'login', 'index.html'));
+app.use('/login', express.static(path.join(publicDir,'login'), { extensions:['html'] }));
+app.get(['/user','/user/'], async (_req,res,next)=>{
+  try{
+    const file=await readFile(path.join(publicDir,'user','index.html'),'utf8');
+    const injected='\n<script src="/user/overview-recovery.js"></script>\n';
+    res.type('html').send(file.replace('</body>', injected+'</body>'));
+  }catch(e){next(e)}
 });
+app.use('/user', express.static(path.join(publicDir,'user'), { extensions:['html'] }));
+app.use('/admin', express.static(path.join(publicDir,'admin'), { extensions:['html'] }));
+app.use('/admin', express.static(path.join(publicDir,'admin'), { extensions:['html'] }));
 
-app.use((req, res) => {
-  res.status(404).json(apiError('NOT_FOUND', `Route tidak ditemukan: ${req.method} ${req.path}`));
-});
+app.get('/', (_req,res)=>res.sendFile(path.join(publicDir,'login','index.html')));
+app.use((req,res)=>res.status(404).json(apiError('NOT_FOUND',`Route tidak ditemukan: ${req.method} ${req.path}`)));
+app.use((err,_req,res,_next)=>{console.error('Unhandled error',err);res.status(500).json(apiError('INTERNAL_ERROR',err?.message||'Terjadi kesalahan internal.'));});
 
-app.use((err, _req, res, _next) => {
-  console.error('Unhandled error', err);
-  res.status(500).json(apiError('INTERNAL_ERROR', err?.message || 'Terjadi kesalahan internal.'));
-});
-
-if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
-  app.listen(port, () => console.log(`GROVIA server listening on ${port}`));
-}
-
+if(process.env.NODE_ENV!=='production'&&process.env.NODE_ENV!=='test')app.listen(port,()=>console.log(`GROVIA server listening on ${port}`));
 export default app;
