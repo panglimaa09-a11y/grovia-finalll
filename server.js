@@ -56,7 +56,7 @@ app.use('/login', express.static(path.join(publicDir,'login'), { extensions:['ht
 app.get(['/user','/user/'], async (_req,res,next)=>{
   try{
     const file=await readFile(path.join(publicDir,'user','index.html'),'utf8');
-    const injected='\n<script src="/user/overview-recovery.js"></script>\n<script src="/user/youtube-connect.js"></script>\n';
+    const injected='\n<script src="/user/overview-recovery.js"></script>\n<script src="/user/youtube-connect.js"></script>\n<script src="/user/user-enhance.js"></script>\n';
     res.type('html').send(file.replace('</body>', injected+'</body>'));
   }catch(e){next(e)}
 });
