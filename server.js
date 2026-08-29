@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -16,19 +18,38 @@ import adminRoutes from './routes/admin.js';
 import webhookRoutes from './routes/webhooks.js';
 import { apiOk, apiError } from './utils/response.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, 'public');
+
 const app = express();
 const port = Number(process.env.PORT || 3000);
-const origin = process.env.APP_ORIGIN || `http://localhost:${port}`;
+const origin = process.env.APP_ORIGIN || undefined;
+
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin, credentials: false, methods: ['GET','POST','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
+app.use(cors({
+  origin: origin || true,
+  credentials: false,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use('/api/webhooks', express.raw({ type: 'application/json', limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false }));
 
-app.get('/api/health', (_req,res)=>res.json(apiOk({service:'grovia',status:'ok',time:new Date().toISOString()})));
-app.get('/api/public-config', (_req,res)=>res.json(apiOk({supabaseUrl:process.env.SUPABASE_URL||'',supabaseAnonKey:process.env.SUPABASE_ANON_KEY||''})));
+app.get('/api/health', (_req, res) => {
+  res.json(apiOk({ service: 'grovia', status: 'ok', time: new Date().toISOString() }));
+});
+
+app.get('/api/public-config', (_req, res) => {
+  res.json(apiOk({
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
+  }));
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/social', socialRoutes);
@@ -40,11 +61,25 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
-app.use('/login',express.static('public/login',{extensions:['html']}));
-app.use('/user',express.static('public/user',{extensions:['html']}));
-app.use('/admin',express.static('public/admin',{extensions:['html']}));
-app.get('/',(_req,res)=>res.sendFile('index.html',{root:'public/login'}));
-app.use((req,res)=>res.status(404).json(apiError('NOT_FOUND',`Route tidak ditemukan: ${req.method} ${req.path}`)));
-app.use((err,_req,res,_next)=>{console.error('Unhandled error',err);res.status(500).json(apiError('INTERNAL_ERROR','Terjadi kesalahan internal.'));});
-if(process.env.NODE_ENV!=='test') app.listen(port,()=>console.log(`GROVIA server listening on ${port}`));
+app.use('/login', express.static(path.join(publicDir, 'login'), { extensions: ['html'] }));
+app.use('/user', express.static(path.join(publicDir, 'user'), { extensions: ['html'] }));
+app.use('/admin', express.static(path.join(publicDir, 'admin'), { extensions: ['html'] }));
+
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(publicDir, 'login', 'index.html'));
+});
+
+app.use((req, res) => {
+  res.status(404).json(apiError('NOT_FOUND', `Route tidak ditemukan: ${req.method} ${req.path}`));
+});
+
+app.use((err, _req, res, _next) => {
+  console.error('Unhandled error', err);
+  res.status(500).json(apiError('INTERNAL_ERROR', err?.message || 'Terjadi kesalahan internal.'));
+});
+
+if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+  app.listen(port, () => console.log(`GROVIA server listening on ${port}`));
+}
+
 export default app;
