@@ -1,9 +1,17 @@
 (function(){
-  function fix(){
+  function apply(){
+    const kpi=document.getElementById('growth');
+    if(kpi && kpi.closest('#overview')) kpi.id='growthScore';
     const section=document.getElementById('growth');
     if(section && section.tagName==='SECTION') section.id='growthEngine';
-    document.querySelectorAll('#nav button[data-p="growth"]').forEach(b=>b.dataset.p='growthEngine');
+    document.querySelectorAll('#nav button').forEach(b=>{
+      if(b.dataset.p==='growth'||b.dataset.p==='growthEngine'){
+        b.dataset.p='growthEngine';
+        b.onclick=()=>go('growthEngine');
+      }
+      if(b.dataset.p==='planpg') b.onclick=()=>go('planpg');
+    });
+    window.__growthIdsFixed=true;
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',fix,{once:true});
-  else fix();
+  apply();
 })();
