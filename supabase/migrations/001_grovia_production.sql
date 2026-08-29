@@ -1,7 +1,7 @@
 -- GROVIA production schema. Additive only; no demo rows.
 create extension if not exists pgcrypto;
 create table if not exists public.grovia_profiles(id uuid primary key references auth.users(id) on delete cascade,display_name text,avatar_url text,timezone text not null default 'Asia/Jakarta',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
-create table if not exists public.grovia_social_accounts(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users(id) on delete cascade,platform text not null,handle text,followers bigint not null default 0,engagement_rate numeric(8,3) not null default 0,status text not null default 'connected',token_expires_at timestamptz,created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create table if not exists public.grovia_social_accounts(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users(id) on delete cascade,platform text not null,handle text,followers bigint not null default 0,engagement_rate numeric(8,3) not null default 0,status text not null default 'connected',token_expires_at timestamptz,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),youtube_channel_id text,youtube_channel_title text,youtube_access_token text,youtube_refresh_token text);
 create table if not exists public.grovia_content_items(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users(id) on delete cascade,title text not null,format text,status text not null default 'draft',platforms text[] not null default '{}',body jsonb not null default '{}',created_at timestamptz not null default now(),published_at timestamptz);
 create table if not exists public.grovia_scheduled_posts(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users(id) on delete cascade,content_id uuid references public.grovia_content_items(id) on delete set null,platform text not null,scheduled_at timestamptz not null,status text not null default 'scheduled',created_at timestamptz not null default now());
 create table if not exists public.grovia_analytics_daily(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users(id) on delete cascade,metric_date date not null,followers bigint not null default 0,reach bigint not null default 0,views bigint not null default 0,watch_time_minutes numeric(14,2) not null default 0,engagement_rate numeric(8,3) not null default 0,created_at timestamptz not null default now(),unique(user_id,metric_date));
@@ -10,6 +10,12 @@ create table if not exists public.grovia_ai_usage(id uuid primary key default ge
 create table if not exists public.grovia_admin_roles(user_id uuid primary key references auth.users(id) on delete cascade,role text not null check(role in('super_admin','admin','operator')),active boolean not null default true,created_at timestamptz not null default now());
 create table if not exists public.grovia_audit_logs(id uuid primary key default gen_random_uuid(),actor_user_id uuid references auth.users(id) on delete set null,action text not null,target_type text,target_id text,result text not null default 'success',metadata jsonb not null default '{}',created_at timestamptz not null default now());
 
+alter table public.grovia_social_accounts add column if not exists youtube_channel_id text;
+alter table public.grovia_social_accounts add column if not exists youtube_channel_title text;
+alter table public.grovia_social_accounts add column if not exists youtube_access_token text;
+alter table public.grovia_social_accounts add column if not exists youtube_refresh_token text;
+
+create unique index if not exists grovia_social_user_platform_uq on public.grovia_social_accounts(user_id,platform);
 create index if not exists grovia_social_user_idx on public.grovia_social_accounts(user_id);
 create index if not exists grovia_content_user_idx on public.grovia_content_items(user_id,created_at desc);
 create index if not exists grovia_schedule_user_idx on public.grovia_scheduled_posts(user_id,scheduled_at);
