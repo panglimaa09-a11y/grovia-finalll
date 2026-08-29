@@ -1,22 +1,25 @@
-# GROVIA Production Rebuild
+# GROVIA FINAL
 
-This rebuild follows the agreed separation:
-- User V2 = creator workspace
-- Admin V5 = platform control center
-- server.js = backend/API entry point
-- Supabase = shared backend data layer
+Production rebuild with strict separation:
+- **User V2**: creator workspace
+- **Admin V5**: platform control center
+- **Login**: Supabase Auth gateway
+- **Backend**: `server.js` + modular API
+- **Database**: Supabase with RLS
 
-## Important
-The supplied V2 UI is preserved under `public/user/index.html` and cleaned of the embedded admin UI/demo counters in the supplied file.
+## Routes
+- `/login/`
+- `/user/`
+- `/admin/`
+- `/api/health`
 
-This package is an implementation scaffold, not a claim that third-party OAuth, payment, AI provider, or admin-role infrastructure is fully live. Those require provider credentials and a secure production backend configuration.
+## Production rules
+No demo counters, fake success states, fake OAuth, fake payment, or frontend secrets. User data is scoped to the authenticated session. Admin access is role-checked server-side.
 
-## Run
+## Local
 1. Copy `.env.example` to `.env`.
-2. Fill required environment variables.
+2. Set Supabase environment values.
 3. `npm install`
 4. `npm start`
-5. Open `/user/` or `/admin/`.
 
-## Supabase
-Use the previously executed `supabase/grovia_user_v2_production.sql` schema. Do not disable RLS.
+Third-party OAuth, AI, payment, and publishing adapters remain explicitly unavailable until real provider credentials and adapter implementations are configured.
