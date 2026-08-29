@@ -44,11 +44,43 @@
     const followersDelta=rows.length>1?Number(latest.followers||0)-Number(rows.at(-2).followers||0):0;
     const avgViews=rows.length?rows.slice(-30).reduce((s,x)=>s+Number(x.views||0),0)/Math.min(30,rows.length):0;
     const recs=recommendation(d);
-    section.innerHTML=`<div class="head"><div><div class="ey">GROWTH INTELLIGENCE</div><h1>Growth Engine</h1><p>Mesin analisis pertumbuhan berdasarkan analytics, konten, jadwal, dan akun nyata.</p></div><button class="btn primary" id="refreshGrowth">↻ Refresh Analysis</button></div>
-      <div class="grid kpis"><div class="card"><div class="label">GROWTH SCORE</div><div class="num">${d.total===null?'—':d.total}</div><div class="muted">Composite performance score</div></div><div class="card"><div class="label">FOLLOWER DELTA</div><div class="num">${followersDelta>=0?'+':''}${fmt(followersDelta)}</div><div class="muted">Perubahan vs hari sebelumnya</div></div><div class="card"><div class="label">AVG DAILY VIEWS</div><div class="num">${fmt(Math.round(avgViews))}</div><div class="muted">30 hari terakhir yang tersedia</div></div><div class="card"><div class="label">CONNECTED ACCOUNTS</div><div class="num">${fmt(accounts.length)}</div><div class="muted">Akun sosial terhubung</div></div></div>
-      <div class="grid two" style="margin-top:14px"><div class="card"><h3>Score Breakdown</h3>${d.components?.length?d.components.map(([n,v])=>`<div style="margin:14px 0"><div class="row" style="border-top:0;padding:0 0 6px"><span>${esc(n)}</span><b>${Math.round(v)}</b></div><div style="height:8px;background:#141b23;border-radius:99px;overflow:hidden"><div style="height:100%;width:${Math.max(0,Math.min(100,v))}%;background:linear-gradient(90deg,#bdf85e,#6fe8b2);border-radius:99px"></div></div></div>`).join(''):'<div class="empty">Belum cukup analytics untuk menghitung score.</div>'}</div>
-      <div class="card"><h3>Growth Signals</h3>${recs.map(([title,text])=>`<div class="row" style="display:block"><b>${esc(title)}</b><div class="muted" style="margin-top:5px;line-height:1.6">${esc(text)}</div></div>`).join('')}</div></div>
-      <div class="card" style="margin-top:14px"><h3>What to do next</h3><div class="grid three"><button class="btn" onclick="go('studio')">✦ Create Content</button><button class="btn" onclick="go('scheduler')">▦ Schedule Posts</button><button class="btn" onclick="go('analytics')">◒ Review Analytics</button></div></div>`;
+    const style=`<style>
+      #growth .growth-wrap{display:grid;gap:16px}
+      #growth .growth-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+      #growth .growth-main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.95fr);gap:14px;align-items:start}
+      #growth .growth-card{background:var(--p);border:1px solid var(--l);border-radius:var(--r);padding:18px;min-width:0}
+      #growth .section-title{margin:0 0 4px;font-size:15px}
+      #growth .section-sub{margin:0;color:var(--m);font-size:11px;line-height:1.55}
+      #growth .score-list{display:grid;gap:14px;margin-top:16px}
+      #growth .score-item{display:grid;gap:7px}
+      #growth .score-head{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px}
+      #growth .score-track{height:9px;background:#141b23;border-radius:999px;overflow:hidden}
+      #growth .score-fill{height:100%;background:linear-gradient(90deg,#bdf85e,#6fe8b2);border-radius:999px}
+      #growth .signal-list{display:grid;gap:10px;margin-top:16px}
+      #growth .signal{padding:13px 14px;border:1px solid var(--l);border-radius:12px;background:#0b1218}
+      #growth .signal b{display:block;font-size:11px;margin-bottom:5px}
+      #growth .signal span{display:block;color:var(--m);font-size:11px;line-height:1.6}
+      #growth .action-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+      #growth .growth-action{width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;text-align:center;white-space:normal;line-height:1.35}
+      #growth .metric .num{line-height:1.05}
+      @media(max-width:1050px){#growth .growth-main{grid-template-columns:1fr}#growth .growth-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:650px){#growth .growth-kpis{grid-template-columns:1fr 1fr}#growth .action-grid{grid-template-columns:1fr}#growth .growth-card{padding:14px}}
+      @media(max-width:480px){#growth .growth-kpis{grid-template-columns:1fr}}
+    </style>`;
+    section.innerHTML=`${style}<div class="growth-wrap">
+      <div class="head"><div><div class="ey">GROWTH INTELLIGENCE</div><h1>Growth Engine</h1><p>Analisis pertumbuhan berdasarkan analytics, konten, jadwal, dan akun nyata.</p></div><button class="btn primary" id="refreshGrowth">↻ Refresh Analysis</button></div>
+      <div class="growth-kpis">
+        <div class="card metric"><div class="label">GROWTH SCORE</div><div class="num">${d.total===null?'—':d.total}</div><div class="muted">Composite performance score</div></div>
+        <div class="card metric"><div class="label">FOLLOWER DELTA</div><div class="num">${followersDelta>=0?'+':''}${fmt(followersDelta)}</div><div class="muted">Perubahan vs hari sebelumnya</div></div>
+        <div class="card metric"><div class="label">AVG DAILY VIEWS</div><div class="num">${fmt(Math.round(avgViews))}</div><div class="muted">30 hari terakhir yang tersedia</div></div>
+        <div class="card metric"><div class="label">CONNECTED ACCOUNTS</div><div class="num">${fmt(accounts.length)}</div><div class="muted">Akun sosial terhubung</div></div>
+      </div>
+      <div class="growth-main">
+        <div class="growth-card"><h3 class="section-title">Score Breakdown</h3><p class="section-sub">Komposisi skor berdasarkan performa terbaru dan aktivitas workspace.</p><div class="score-list">${d.components?.length?d.components.map(([n,v])=>`<div class="score-item"><div class="score-head"><span>${esc(n)}</span><b>${Math.round(v)}/100</b></div><div class="score-track"><div class="score-fill" style="width:${Math.max(0,Math.min(100,v))}%"></div></div></div>`).join(''):'<div class="empty">Belum cukup analytics untuk menghitung score.</div>'}</div></div>
+        <div class="growth-card"><h3 class="section-title">Growth Signals</h3><p class="section-sub">Sinyal yang perlu diperhatikan dari data terbaru.</p><div class="signal-list">${recs.map(([title,text])=>`<div class="signal"><b>${esc(title)}</b><span>${esc(text)}</span></div>`).join('')}</div></div>
+      </div>
+      <div class="growth-card"><h3 class="section-title">What to do next</h3><p class="section-sub">Langkah cepat berdasarkan kondisi workspace saat ini.</p><div class="action-grid"><button class="btn growth-action" onclick="go('studio')">✦ Create Content</button><button class="btn growth-action" onclick="go('scheduler')">▦ Schedule Posts</button><button class="btn growth-action" onclick="go('analytics')">◒ Review Analytics</button></div></div>
+    </div>`;
     $('refreshGrowth').onclick=load;
   }
   async function load(){
@@ -56,7 +88,7 @@
       const [a,sc,c,sa]=await Promise.all([api('/api/analytics/summary'),api('/api/scheduler'),api('/api/content'),api('/api/social/accounts')]);
       render(a?.rows||[],sc||[],c||[],sa||[]);
     }catch(e){
-      const section=$('growth');if(section)section.innerHTML=`<div class="head"><div><div class="ey">GROWTH INTELLIGENCE</div><h1>Growth Engine</h1><p>Analisis pertumbuhan workspace.</p></div></div><div class="card empty">${esc(e.message||'Growth Engine gagal dimuat.')}</div>`;
+      const section=$('growth');if(section)section.innerHTML=`<div class="head"><div><div class="ey">GROWTH INTELLIGENCE</div><h1>Growth Engine</h1><p>Analisis pertumbuhan workspace.</p></div></div><div class="growth-card empty">${esc(e.message||'Growth Engine gagal dimuat.')}</div>`;
       console.warn('Growth Engine:',e);
     }
   }
