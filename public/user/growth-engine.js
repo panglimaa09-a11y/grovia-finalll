@@ -1,6 +1,6 @@
 (function(){
   const $=id=>document.getElementById(id);
-  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const fmt=n=>Number(n||0).toLocaleString('id-ID');
   const pct=n=>Number(n||0).toFixed(1)+'%';
   async function api(path){
@@ -38,34 +38,34 @@
     return out;
   }
   function render(rows,schedules,content,accounts){
-    const section=$('growth');if(!section)return;
+    const section=$('growthEngine');if(!section)return;
     const d=score(rows,schedules,content);
     const latest=rows.at(-1)||{};
     const followersDelta=rows.length>1?Number(latest.followers||0)-Number(rows.at(-2).followers||0):0;
     const avgViews=rows.length?rows.slice(-30).reduce((s,x)=>s+Number(x.views||0),0)/Math.min(30,rows.length):0;
     const recs=recommendation(d);
     const style=`<style>
-      #growth .growth-wrap{display:grid;gap:16px}
-      #growth .growth-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-      #growth .growth-main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.95fr);gap:14px;align-items:start}
-      #growth .growth-card{background:var(--p);border:1px solid var(--l);border-radius:var(--r);padding:18px;min-width:0}
-      #growth .section-title{margin:0 0 4px;font-size:15px}
-      #growth .section-sub{margin:0;color:var(--m);font-size:11px;line-height:1.55}
-      #growth .score-list{display:grid;gap:14px;margin-top:16px}
-      #growth .score-item{display:grid;gap:7px}
-      #growth .score-head{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px}
-      #growth .score-track{height:9px;background:#141b23;border-radius:999px;overflow:hidden}
-      #growth .score-fill{height:100%;background:linear-gradient(90deg,#bdf85e,#6fe8b2);border-radius:999px}
-      #growth .signal-list{display:grid;gap:10px;margin-top:16px}
-      #growth .signal{padding:13px 14px;border:1px solid var(--l);border-radius:12px;background:#0b1218}
-      #growth .signal b{display:block;font-size:11px;margin-bottom:5px}
-      #growth .signal span{display:block;color:var(--m);font-size:11px;line-height:1.6}
-      #growth .action-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
-      #growth .growth-action{width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;text-align:center;white-space:normal;line-height:1.35}
-      #growth .metric .num{line-height:1.05}
-      @media(max-width:1050px){#growth .growth-main{grid-template-columns:1fr}#growth .growth-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-      @media(max-width:650px){#growth .growth-kpis{grid-template-columns:1fr 1fr}#growth .action-grid{grid-template-columns:1fr}#growth .growth-card{padding:14px}}
-      @media(max-width:480px){#growth .growth-kpis{grid-template-columns:1fr}}
+      #growthEngine .growth-wrap{display:grid;gap:16px}
+      #growthEngine .growth-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+      #growthEngine .growth-main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.95fr);gap:14px;align-items:start}
+      #growthEngine .growth-card{background:var(--p);border:1px solid var(--l);border-radius:var(--r);padding:18px;min-width:0}
+      #growthEngine .section-title{margin:0 0 4px;font-size:15px}
+      #growthEngine .section-sub{margin:0;color:var(--m);font-size:11px;line-height:1.55}
+      #growthEngine .score-list{display:grid;gap:14px;margin-top:16px}
+      #growthEngine .score-item{display:grid;gap:7px}
+      #growthEngine .score-head{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px}
+      #growthEngine .score-track{height:9px;background:#141b23;border-radius:999px;overflow:hidden}
+      #growthEngine .score-fill{height:100%;background:linear-gradient(90deg,#bdf85e,#6fe8b2);border-radius:999px}
+      #growthEngine .signal-list{display:grid;gap:10px;margin-top:16px}
+      #growthEngine .signal{padding:13px 14px;border:1px solid var(--l);border-radius:12px;background:#0b1218}
+      #growthEngine .signal b{display:block;font-size:11px;margin-bottom:5px}
+      #growthEngine .signal span{display:block;color:var(--m);font-size:11px;line-height:1.6}
+      #growthEngine .action-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+      #growthEngine .growth-action{width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;text-align:center;white-space:normal;line-height:1.35}
+      #growthEngine .metric .num{line-height:1.05}
+      @media(max-width:1050px){#growthEngine .growth-main{grid-template-columns:1fr}#growthEngine .growth-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:650px){#growthEngine .growth-kpis{grid-template-columns:1fr 1fr}#growthEngine .action-grid{grid-template-columns:1fr}#growthEngine .growth-card{padding:14px}}
+      @media(max-width:480px){#growthEngine .growth-kpis{grid-template-columns:1fr}}
     </style>`;
     section.innerHTML=`${style}<div class="growth-wrap">
       <div class="head"><div><div class="ey">GROWTH INTELLIGENCE</div><h1>Growth Engine</h1><p>Analisis pertumbuhan berdasarkan analytics, konten, jadwal, dan akun nyata.</p></div><button class="btn primary" id="refreshGrowth">↻ Refresh Analysis</button></div>
@@ -88,7 +88,7 @@
       const [a,sc,c,sa]=await Promise.all([api('/api/analytics/summary'),api('/api/scheduler'),api('/api/content'),api('/api/social/accounts')]);
       render(a?.rows||[],sc||[],c||[],sa||[]);
     }catch(e){
-      const section=$('growth');if(section)section.innerHTML=`<div class="head"><div><div class="ey">GROWTH INTELLIGENCE</div><h1>Growth Engine</h1><p>Analisis pertumbuhan workspace.</p></div></div><div class="growth-card empty">${esc(e.message||'Growth Engine gagal dimuat.')}</div>`;
+      const section=$('growthEngine');if(section)section.innerHTML=`<div class="head"><div><div class="ey">GROWTH INTELLIGENCE</div><h1>Growth Engine</h1><p>Analisis pertumbuhan workspace.</p></div></div><div class="growth-card empty">${esc(e.message||'Growth Engine gagal dimuat.')}</div>`;
       console.warn('Growth Engine:',e);
     }
   }
