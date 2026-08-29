@@ -1,0 +1,1 @@
+import{Router}from'express';import{apiError}from'../utils/response.js';const r=Router();r.post('/payment',(_req,res)=>res.status(501).json(apiError('WEBHOOK_PENDING','Payment webhook production belum dikonfigurasi.')));export default r;
