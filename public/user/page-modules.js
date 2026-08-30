@@ -12,6 +12,7 @@
         if(target==='growthEngine'&&typeof window.loadGrowthEngine==='function')setTimeout(()=>window.loadGrowthEngine(),0);
         if(target==='planpg'&&typeof window.loadGrowthPlan==='function')setTimeout(()=>window.loadGrowthPlan(),0);
         if(target==='reports'&&typeof window.loadReportsUI==='function')setTimeout(async()=>{await window.loadReportsUI();const el=document.getElementById('reports');if(el)el.classList.add('active');},0);
+        if(target==='billing'&&typeof window.loadBillingUI==='function')setTimeout(()=>window.loadBillingUI(),0);
       };
       wrappedGo=true;
     };
@@ -26,6 +27,7 @@
         if(typeof window.loadGrowthEngine==='function')await window.loadGrowthEngine();
         if(typeof window.loadGrowthPlan==='function')await window.loadGrowthPlan();
         if(typeof window.loadReportsUI==='function')await window.loadReportsUI();
+        if(typeof window.loadBillingUI==='function')await window.loadBillingUI();
         return result;
       };
       window.__groviaModuleRefreshWrapped=true;
