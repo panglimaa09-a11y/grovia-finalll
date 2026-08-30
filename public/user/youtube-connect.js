@@ -1,67 +1,62 @@
 (function(){
-  const providers={
-    youtube:{label:'YouTube',icon:'▶',platform:'youtube',action:'youtube'},
-    facebook:{label:'Facebook',icon:'f',platform:'facebook',action:'facebook'},
-    instagram:{label:'Instagram',icon:'◎',platform:'instagram',action:'instagram'},
-    tiktok:{label:'TikTok',icon:'♪',platform:'tiktok',action:'tiktok'},
-    threads:{label:'Threads',icon:'@',platform:'threads',action:'threads'}
-  };
-  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  async function getToken(){try{
-    if(typeof sb!=='undefined'&&sb){const s=await sb.auth.getSession();return s?.data?.session?.access_token||null;}
-    const cfg=await fetch('/api/public-config',{cache:'no-store'}).then(r=>r.json());
-    if(!cfg.ok||!window.supabase)return null;
-    const client=supabase.createClient(cfg.data.supabaseUrl,cfg.data.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true}});
-    const s=await client.auth.getSession();return s?.data?.session?.access_token||null;
-  }catch{return null}}
-  function toast(message,error=false){const old=document.getElementById('socialToast');if(old)old.remove();const el=document.createElement('div');el.id='socialToast';el.textContent=message;el.style.cssText=`position:fixed;right:22px;bottom:22px;z-index:99999;padding:12px 15px;border-radius:12px;background:#0c1118;border:1px solid #2a3540;color:${error?'#ffb2b2':'#dfffc0'};font-weight:700;box-shadow:0 14px 35px rgba(0,0,0,.35)`;document.body.appendChild(el);setTimeout(()=>el.remove(),3000)}
-  async function renderConnectedAccount(){try{
-    const token=await getToken();if(!token)return;
-    const response=await fetch('/api/social/accounts',{headers:{Authorization:'Bearer '+token},cache:'no-store'});
-    const result=await response.json().catch(()=>({}));if(!response.ok||!result.ok)return;
-    const accounts=Array.isArray(result.data)?result.data:[];const box=document.getElementById('accountsBox');if(!box)return;
-    if(!accounts.length){box.innerHTML='<div class="empty">Belum ada akun sosial terhubung.</div>';return;}
-    box.innerHTML=accounts.map(x=>{
-      const p=providers[String(x.platform||'').toLowerCase()]||{label:String(x.platform||'Social'),icon:'•'};
-      const followers=Number(x.followers||0).toLocaleString('id-ID');
-      const name=x.youtube_channel_title||x.provider_display_name||x.handle||x.provider_username||'Connected account';
-      const username=x.provider_username||x.handle||x.youtube_channel_id||'';
-      return `<div class="row"><div style="display:flex;gap:10px;align-items:center"><div class="tag" style="min-width:28px;text-align:center">${esc(p.icon)}</div><div><b>${esc(p.label)}</b><div class="muted">${esc(name)}</div>${username?`<div class="muted">${esc(username)}</div>`:''}</div></div><div style="text-align:right"><span class="tag">${esc(x.status||'connected')}</span><div class="muted">${followers} followers</div><button class="btn" style="margin-top:7px" onclick="disconnectSocial('${esc(x.id)}','${esc(p.label)}')">Disconnect</button></div></div>`;
-    }).join('');
-  }catch(e){console.warn('Render connected social account:',e?.message||e)}}
-  function chooser(){
-    const old=document.getElementById('socialConnectChooser');if(old)old.remove();
-    const wrap=document.createElement('div');wrap.id='socialConnectChooser';wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100000;display:grid;place-items:center;padding:20px';
-    const cards=Object.values(providers).map(p=>`<button class="btn" data-provider="${p.platform}" style="display:flex;align-items:center;gap:12px;text-align:left;padding:14px;border-radius:12px"><span class="tag" style="min-width:30px;text-align:center">${esc(p.icon)}</span><span><b>${esc(p.label)}</b><small style="display:block;color:#7d8997;margin-top:3px">Hubungkan akun ${esc(p.label)}</small></span></button>`).join('');
-    wrap.innerHTML=`<div style="width:min(560px,100%);background:#0c1118;border:1px solid #202a35;border-radius:18px;padding:22px;color:#edf3f8;box-shadow:0 30px 80px rgba(0,0,0,.45)"><div style="display:flex;justify-content:space-between;align-items:start;gap:10px"><div><div class="ey">SOCIAL ACCOUNTS</div><h2 style="margin:7px 0">Connect Account</h2><div style="color:#7d8997;font-size:12px">Pilih platform yang ingin kamu tautkan ke GROVIA.</div></div><button class="btn" data-close="1">×</button></div><div style="display:grid;gap:8px;margin-top:18px">${cards}</div><div style="margin-top:14px;color:#61707e;font-size:10px">Platform yang tersedia: Facebook, Instagram, TikTok, Threads, dan YouTube. X tidak digunakan.</div></div>`;
-    document.body.appendChild(wrap);
-    wrap.onclick=e=>{if(e.target===wrap||e.target.closest('[data-close]')){wrap.remove();return}const btn=e.target.closest('[data-provider]');if(!btn)return;wrap.remove();connectProvider(btn.dataset.provider)};
-  }
-  async function connectProvider(platform){
-    if(platform==='youtube')return connectYouTube();
-    const labels={facebook:'Facebook',instagram:'Instagram',tiktok:'TikTok',threads:'Threads'};
+  const PROVIDERS=[
+    {key:'youtube',label:'YouTube',note:'Channel, subscribers, analytics, publisher',icon:'▶'},
+    {key:'facebook',label:'Facebook',note:'Page profile, followers, reach & engagement',icon:'f'},
+    {key:'instagram',label:'Instagram',note:'Professional account, followers & insights',icon:'◎'},
+    {key:'tiktok',label:'TikTok',note:'Profile, followers, views & engagement',icon:'♪'},
+    {key:'threads',label:'Threads',note:'Profile, followers & engagement',icon:'@'}
+  ];
+  async function getToken(){
     try{
-      const token=await getToken();if(!token){alert('Sesi login tidak valid. Silakan login kembali.');location.href='/login/';return;}
-      const response=await fetch('/api/social/connect-provider',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({platform})});
-      const result=await response.json().catch(()=>({}));
-      if(!response.ok||!result.ok)throw Error((result?.error?.code||('HTTP_'+response.status))+': '+(result?.error?.message||`${labels[platform]} belum siap.`));
-      if(!result.data?.authorization_url)throw Error('OAuth URL tidak tersedia.');
-      window.location.href=result.data.authorization_url;
-    }catch(error){toast(error?.message||`Gagal menghubungkan ${labels[platform]}.`,true)}
+      if(typeof sb!=='undefined'&&sb){const s=await sb.auth.getSession();return s?.data?.session?.access_token||null;}
+      const cfg=await fetch('/api/public-config',{cache:'no-store'}).then(r=>r.json());
+      if(!cfg.ok||!window.supabase)return null;
+      const client=supabase.createClient(cfg.data.supabaseUrl,cfg.data.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true}});
+      const s=await client.auth.getSession();return s?.data?.session?.access_token||null;
+    }catch{return null}
   }
-  async function connectYouTube(){try{
-    const token=await getToken();if(!token){alert('Sesi login tidak valid. Silakan login kembali.');location.href='/login/';return;}
-    const response=await fetch('/api/social/connect',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({platform:'youtube'})});
-    const result=await response.json().catch(()=>({}));if(!response.ok||!result.ok)throw Error((result?.error?.code||('HTTP_'+response.status))+': '+(result?.error?.message||'Gagal memulai koneksi YouTube.'));
-    if(!result.data?.authorization_url)throw Error('OAUTH_URL_MISSING: URL OAuth YouTube tidak tersedia.');window.location.href=result.data.authorization_url;
-  }catch(error){alert(error?.message||'Gagal menghubungkan YouTube.')}}
-  async function disconnectSocial(id,label='akun sosial'){
-    const token=await getToken();if(!token){alert('Sesi login tidak valid.');return}
-    if(!confirm(`Putuskan koneksi ${label} ini?`))return;
-    try{const response=await fetch('/api/social/disconnect',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({id}),cache:'no-store'});const result=await response.json().catch(()=>({}));if(!response.ok||!result.ok)throw Error(result?.error?.message||('HTTP '+response.status));toast(`${label} berhasil diputuskan.`);await renderConnectedAccount();if(typeof window.groviaReload==='function')await window.groviaReload();}catch(e){toast('Gagal disconnect: '+(e.message||'Unknown error'),true)}}
-  window.connect=chooser;window.connectYouTube=connectYouTube;window.disconnectSocial=disconnectSocial;window.renderConnectedAccount=renderConnectedAccount;
-  const params=new URLSearchParams(window.location.search);
-  if(params.get('oauth')==='youtube'){const status=params.get('status');const stage=params.get('stage');const code=params.get('code');const reason=params.get('reason');const messages={connected:'YouTube berhasil terhubung.',denied:'Koneksi YouTube dibatalkan.',invalid_state:'Sesi koneksi YouTube tidak valid. Silakan coba lagi.',missing_code:'Kode OAuth YouTube tidak diterima.',no_channel:'Akun Google tidak memiliki channel YouTube yang dapat diakses.',error:`Koneksi YouTube gagal.\n${stage||'OAUTH_CALLBACK'} / ${code||'UNKNOWN'}\n${reason||'Periksa konfigurasi OAuth dan coba lagi.'}`};const message=messages[status];if(message)setTimeout(()=>alert(message),150);if(status==='connected')setTimeout(renderConnectedAccount,350);history.replaceState({},'',window.location.pathname)}
-  if(params.get('oauth')==='social'){const status=params.get('status');const provider=params.get('platform')||'social';const reason=params.get('reason');if(status==='connected')setTimeout(renderConnectedAccount,350);if(status==='error')setTimeout(()=>alert(`Koneksi ${provider} gagal.\n${reason||'Periksa konfigurasi provider.'}`),150);history.replaceState({},'',window.location.pathname)}
+  function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function fmt(n){return Number(n||0).toLocaleString('id-ID')}
+  function toast(message,error=false){const old=document.getElementById('socialToast');if(old)old.remove();const el=document.createElement('div');el.id='socialToast';el.textContent=message;el.style.cssText=`position:fixed;right:22px;bottom:22px;z-index:99999;padding:12px 15px;border-radius:12px;background:#0c1118;border:1px solid #2a3540;color:${error?'#ffb2b2':'#dfffc0'};font-weight:700;box-shadow:0 14px 35px rgba(0,0,0,.35)`;document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
+  async function api(path,opt={}){const token=await getToken();if(!token)throw Error('Sesi login tidak valid.');const r=await fetch(path,{...opt,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...(opt.headers||{})},cache:'no-store'});const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)throw Error(j.error?.message||`HTTP ${r.status}`);return j.data??j}
+  function providerMeta(key){return PROVIDERS.find(x=>x.key===key)||{key,label:key,note:'',icon:'•'}}
+  function chooser(){
+    const old=document.getElementById('groviaSocialChooser');if(old)old.remove();
+    const wrap=document.createElement('div');wrap.id='groviaSocialChooser';wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:100000;display:grid;place-items:center;padding:20px';
+    const buttons=PROVIDERS.map(p=>`<button class="btn" data-provider="${p.key}" style="display:flex;gap:12px;align-items:center;text-align:left"><span style="width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:#151e29;font-weight:900">${p.icon}</span><span><b style="display:block">${p.label}</b><small style="color:#7d8997">${p.note}</small></span></button>`).join('');
+    wrap.innerHTML=`<div style="width:min(560px,100%);background:#0c1118;border:1px solid #202a35;border-radius:16px;padding:20px;color:#edf3f8"><h3 style="margin:0 0 6px">Connect Social Account</h3><div style="color:#7d8997;font-size:12px;margin-bottom:16px">Setiap platform memiliki data, token, dan sinkronisasi sendiri.</div><div style="display:grid;gap:9px">${buttons}<button class="btn" data-close="1">Batal</button></div></div>`;
+    document.body.appendChild(wrap);
+    wrap.onclick=e=>{const provider=e.target.closest('[data-provider]')?.dataset.provider;if(e.target===wrap||e.target.closest('[data-close]')){wrap.remove();return}if(provider){wrap.remove();connectProvider(provider)}};
+  }
+  async function connectProvider(provider){
+    try{
+      if(provider!=='youtube'){toast(`${providerMeta(provider).label} belum dikonfigurasi OAuth di server. Tidak ada data palsu yang akan dibuat.`,true);return;}
+      const result=await api('/api/social/connect',{method:'POST',body:JSON.stringify({platform:'youtube'})});
+      if(!result?.authorization_url)throw Error('URL OAuth YouTube tidak tersedia.');
+      location.href=result.authorization_url;
+    }catch(e){alert(e.message||'Gagal menghubungkan akun.')}
+  }
+  async function loadTokenBalance(){
+    const box=document.getElementById('socialTokenBox');if(!box)return;
+    try{
+      const sub=await api('/api/billing/subscription');
+      const usage=await api('/api/billing/usage');
+      const balance=sub?.credits_balance??sub?.credit_balance??sub?.credits_remaining;
+      box.innerHTML=`<div class="label">GROVIA TOKENS</div><div class="num" style="font-size:28px">${balance==null?'—':fmt(balance)}</div><div class="muted">AI credits terpakai: ${fmt(usage?.aiCreditsUsed||0)}</div>`;
+    }catch(e){box.innerHTML='<div class="label">GROVIA TOKENS</div><div class="num" style="font-size:28px">—</div><div class="muted">Saldo token belum tersedia.</div>'}
+  }
+  async function renderConnectedAccount(){
+    try{
+      const accounts=await api('/api/social/accounts');
+      const box=document.getElementById('accountsBox'); if(!box)return;
+      if(!accounts.length){box.innerHTML='<div class="empty">Belum ada akun sosial.</div>';await loadTokenBalance();return;}
+      box.innerHTML=accounts.map(x=>{const p=providerMeta(String(x.platform||'').toLowerCase());const connected=x.status==='connected';return `<div class="row"><div style="min-width:0"><div style="display:flex;gap:8px;align-items:center"><b>${esc(p.label)}</b><span class="tag">${esc(x.status||'connected')}</span></div><div class="muted">${esc(x.provider_display_name||x.youtube_channel_title||x.handle||x.provider_username||'Connected account')}</div><div class="muted">${esc(x.provider_username||x.youtube_channel_id||'')}</div><div class="muted" style="margin-top:4px">${esc(p.note)}</div></div><div style="text-align:right"><div class="muted">${fmt(x.followers)} followers</div><div class="muted">${Number(x.engagement_rate||0).toFixed(1)}% engagement</div>${x.token_expires_at?`<div class="muted">Token: ${new Date(x.token_expires_at).toLocaleString('id-ID')}</div>`:''}${String(x.platform||'').toLowerCase()==='youtube'&&connected?`<button class="btn" style="margin-top:7px" onclick="disconnectSocial('${esc(x.id)}')">Disconnect</button>`:''}</div></div>`}).join('');
+      await loadTokenBalance();
+    }catch(e){console.warn('Render connected social accounts:',e?.message||e)}
+  }
+  async function disconnectSocial(id){
+    try{if(!confirm('Putuskan akun sosial ini?'))return;await api('/api/social/disconnect',{method:'POST',body:JSON.stringify({id})});toast('Akun berhasil diputuskan.');await renderConnectedAccount();if(typeof window.groviaReload==='function')await window.groviaReload()}catch(e){toast(e.message||'Gagal disconnect.',true)}
+  }
+  window.connect=chooser;window.connectSocial=connectProvider;window.disconnectSocial=disconnectSocial;window.disconnectYouTube=disconnectSocial;window.renderConnectedAccount=renderConnectedAccount;
   document.addEventListener('DOMContentLoaded',()=>setTimeout(renderConnectedAccount,150));
 })();
