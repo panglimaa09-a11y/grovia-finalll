@@ -57,7 +57,15 @@
       const t=await token();if(!t){alert('Sesi login tidak valid.');return;}
       const r=await fetch('/api/billing/checkout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},body:JSON.stringify({product:'credits'})});
       const j=await r.json().catch(()=>({}));
-      if(!r.ok||j.ok===false)throw Error(j.error?.message||('HTTP '+r.status));
+      if(!r.ok||j.ok===false){
+        const message=j.error?.message||(`HTTP ${r.status}`);
+        if(j.error?.code==='CHECKOUT_NOT_CONFIGURED'){
+          alert('Pembelian Credits belum aktif karena payment gateway production belum dikonfigurasi.');
+          return;
+        }
+        throw Error(message);
+      }
+      if(j.data?.checkout_url){window.location.href=j.data.checkout_url;return;}
       alert('Checkout siap digunakan.');
     }catch(e){alert(e.message||'Payment adapter belum tersedia.');}
   };
