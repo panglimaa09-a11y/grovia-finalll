@@ -11,7 +11,7 @@
         if(target==='publisher'&&typeof window.loadPublisherUI==='function')setTimeout(()=>window.loadPublisherUI(),0);
         if(target==='growthEngine'&&typeof window.loadGrowthEngine==='function')setTimeout(()=>window.loadGrowthEngine(),0);
         if(target==='planpg'&&typeof window.loadGrowthPlan==='function')setTimeout(()=>window.loadGrowthPlan(),0);
-        if(target==='reports'&&typeof window.loadReportsUI==='function')setTimeout(()=>window.loadReportsUI(),0);
+        if(target==='reports'&&typeof window.loadReportsUI==='function')setTimeout(async()=>{await window.loadReportsUI();const el=document.getElementById('reports');if(el)el.classList.add('active');},0);
       };
       wrappedGo=true;
     };
