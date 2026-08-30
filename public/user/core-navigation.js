@@ -22,6 +22,9 @@
     });
     if(target==='growthEngine'&&typeof window.loadGrowthEngine==='function')setTimeout(window.loadGrowthEngine,0);
     if(target==='planpg'&&typeof window.loadGrowthPlan==='function')setTimeout(window.loadGrowthPlan,0);
+    if(target==='scheduler'&&typeof window.loadSchedulerUI==='function')setTimeout(window.loadSchedulerUI,0);
+    if(target==='publisher'&&typeof window.loadPublisherUI==='function')setTimeout(window.loadPublisherUI,0);
+    if(target==='reports'&&typeof window.loadReportsUI==='function')setTimeout(window.loadReportsUI,0);
   };
   async function logout(){try{if(client)await client.auth.signOut()}finally{location.href='/login/'}}
   function bind(){
