@@ -1,0 +1,18 @@
+import { Router } from 'express';
+import crypto from 'node:crypto';
+import { requireUser } from '../middleware/auth.js';
+import { apiOk, apiError } from '../utils/response.js';
+
+const r=Router();
+const META_AUTH='https://www.facebook.com/v23.0/dialog/oauth';
+const IG_AUTH='https://www.instagram.com/oauth/authorize';
+const THREADS_AUTH='https://threads.net/oauth/authorize';
+const TIKTOK_AUTH='https://www.tiktok.com/v2/auth/authorize/';
+const allowed=new Set(['facebook','instagram','tiktok','threads']);
+function origin(){return String(process.env.APP_ORIGIN||'').trim().replace(/\/$/,'')||`https://${String(process.env.VERCEL_URL||'grovia-finalll.vercel.app').replace(/^https?:\/\//,'')}`}
+function secret(){return process.env.OAUTH_STATE_SECRET||process.env.SUPABASE_SERVICE_ROLE_KEY||'grovia-social-provider-state'}
+function state(userId,platform){const payload=Buffer.from(JSON.stringify({userId,platform,nonce:crypto.randomBytes(18).toString('base64url'),exp:Date.now()+10*60*1000})).toString('base64url');const sig=crypto.createHmac('sha256',secret()).update(payload).digest('base64url');return `${payload}.${sig}`}
+function cfg(platform){if(platform==='facebook'||platform==='instagram')return [process.env.META_APP_ID,process.env.META_APP_SECRET].every(Boolean);if(platform==='threads')return [process.env.THREADS_APP_ID,process.env.THREADS_APP_SECRET].every(Boolean);if(platform==='tiktok')return [process.env.TIKTOK_CLIENT_KEY,process.env.TIKTOK_CLIENT_SECRET].every(Boolean);return false}
+r.post('/connect-provider',requireUser,async(req,res)=>{const platform=String(req.body?.platform||'').toLowerCase();if(!allowed.has(platform))return res.status(400).json(apiError('UNSUPPORTED_PLATFORM','Platform harus Facebook, Instagram, TikTok, atau Threads.'));if(!cfg(platform))return res.status(503).json(apiError('PROVIDER_NOT_CONFIGURED',`${platform} belum dikonfigurasi di server. Tambahkan credential OAuth provider terlebih dahulu.`));const s=state(req.user.id,platform);const redirect=`${origin()}/api/social/providers/callback`;let url='';if(platform==='facebook')url=`${META_AUTH}?${new URLSearchParams({client_id:process.env.META_APP_ID,redirect_uri:`${redirect}/facebook`,response_type:'code',scope:'public_profile,pages_show_list,pages_read_engagement',state:s})}`;if(platform==='instagram')url=`${IG_AUTH}?${new URLSearchParams({client_id:process.env.META_APP_ID,redirect_uri:`${redirect}/instagram`,response_type:'code',scope:'instagram_business_basic,instagram_business_content_publish',state:s})}`;if(platform==='threads')url=`${THREADS_AUTH}?${new URLSearchParams({client_id:process.env.THREADS_APP_ID,redirect_uri:`${redirect}/threads`,response_type:'code',scope:'threads_basic,threads_content_publish',state:s})}`;if(platform==='tiktok')url=`${TIKTOK_AUTH}?${new URLSearchParams({client_key:process.env.TIKTOK_CLIENT_KEY,scope:'user.info.basic,user.info.profile,user.info.stats',response_type:'code',redirect_uri:`${redirect}/tiktok`,state:s})}`;res.json(apiOk({platform,authorization_url:url}));});
+r.get('/callback/:platform',(req,res)=>{const platform=String(req.params.platform||'').toLowerCase();if(!allowed.has(platform))return res.redirect(`${origin()}/user/?oauth=social&status=error&platform=${encodeURIComponent(platform)}&reason=Unsupported%20platform`);const status=req.query.error?'error':'error';const reason=req.query.error_description||'OAuth callback scaffolding siap, tetapi token exchange untuk provider ini belum diaktifkan.';res.redirect(`${origin()}/user/?oauth=social&status=${status}&platform=${encodeURIComponent(platform)}&reason=${encodeURIComponent(reason)}`)});
+export default r;
