@@ -7,6 +7,8 @@
       window.go=function(page){
         const target=page==='growth'?'growthEngine':page;
         originalGo(target);
+        if(target==='scheduler'&&typeof window.loadSchedulerUI==='function')setTimeout(()=>window.loadSchedulerUI(),0);
+        if(target==='publisher'&&typeof window.loadPublisherUI==='function')setTimeout(()=>window.loadPublisherUI(),0);
         if(target==='growthEngine'&&typeof window.loadGrowthEngine==='function')setTimeout(()=>window.loadGrowthEngine(),0);
         if(target==='planpg'&&typeof window.loadGrowthPlan==='function')setTimeout(()=>window.loadGrowthPlan(),0);
       };
@@ -23,6 +25,7 @@
       const original=window.groviaReload;
       window.groviaReload=async function(){
         const result=await original();
+        if(typeof window.loadSchedulerUI==='function')await window.loadSchedulerUI();
         if(typeof window.loadGrowthEngine==='function')await window.loadGrowthEngine();
         if(typeof window.loadGrowthPlan==='function')await window.loadGrowthPlan();
         return result;
