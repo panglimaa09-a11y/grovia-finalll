@@ -11,15 +11,12 @@
         if(target==='publisher'&&typeof window.loadPublisherUI==='function')setTimeout(()=>window.loadPublisherUI(),0);
         if(target==='growthEngine'&&typeof window.loadGrowthEngine==='function')setTimeout(()=>window.loadGrowthEngine(),0);
         if(target==='planpg'&&typeof window.loadGrowthPlan==='function')setTimeout(()=>window.loadGrowthPlan(),0);
+        if(target==='reports'&&typeof window.loadReportsUI==='function')setTimeout(()=>window.loadReportsUI(),0);
       };
       wrappedGo=true;
     };
     attachGo();
-    const timer=setInterval(()=>{
-      attachGo();
-      if(wrappedGo)clearInterval(timer);
-    },100);
-
+    const timer=setInterval(()=>{attachGo();if(wrappedGo)clearInterval(timer)},100);
     const protectRefresh=()=>{
       if(typeof window.groviaReload!=='function'||window.__groviaModuleRefreshWrapped)return false;
       const original=window.groviaReload;
@@ -28,6 +25,7 @@
         if(typeof window.loadSchedulerUI==='function')await window.loadSchedulerUI();
         if(typeof window.loadGrowthEngine==='function')await window.loadGrowthEngine();
         if(typeof window.loadGrowthPlan==='function')await window.loadGrowthPlan();
+        if(typeof window.loadReportsUI==='function')await window.loadReportsUI();
         return result;
       };
       window.__groviaModuleRefreshWrapped=true;
